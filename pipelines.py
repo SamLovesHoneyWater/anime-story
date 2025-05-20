@@ -1,5 +1,5 @@
-import json, base64, os
-from diffuse import simple_diffuse
+import json, os
+import edge_tts
 
 def create_voiceover_script(full_text, client):
     prompt = f"""
@@ -35,16 +35,18 @@ def design_shots(script, characters, client):
     Think of yourself as a playwright or director.
     You should be concise but detailed. You should include only elements that are relevant to the viewer's perception.
     
-    Each description should be a single string with the following elements:
+    Each description should consider the following elements:
     - character_name: the name of the main character in the scene (only one character per scene)
-    - style: always "realistic anime visual novel"
-    - scene: where the shot takes place (e.g.: at the back rows of a high school classroom on the first floor)
-    - setting: short description of the time of day and weather (e.g.: sunny noon)
-    - attire: what the character is wearing (e.g.: a white shirt and a black skirt, and a red ribbon, all part of a Japanese-style school uniform)
-    - action: character's action and pose (e.g.: looking at "me" with a smile, holding a pencil in her right hand, left hand supporting her chin)
-    - camera: specify the angle, usually directly facing the character (e.g.: medium shot of character, camera facing towards the window of the classroom)
-    - background: describe the background elements (e.g., there are trees outside the window)
+    - view: front, side, back, close-up, etc.
+    - clothing: simple white dress, school uniform shirt, black gloves, etc.
+    - expression: happy, sad, angry, surprised, etc.
+    - pose: standing, sitting, lying down, clasped hands, etc.
+    - action: cooking, looking at me, sleeping, etc.
+    - setting: indoor, living room, gym, jungle, moon, day, etc.
+
+    For each shot, you should compose a comma-separated list of words or short phrases that concisely and effectively describe the scene, e.g.: "medium shot, white gloves, white dress, wedding dress, bare shoulders, collarbone, excited, standing, tongue out, cutting cake, ceremony, flower, cake, fork"
     """
+
     prompt = f"""
     Full script: {script}
     
@@ -56,13 +58,13 @@ def design_shots(script, characters, client):
         "shots": [
             "character_name": string, one of: {characters}
             "coverage": [index_1, index_2, ...] # A list of int indices of the lines covered by this shot, at most length 2
-            "description": string in English that includes the required elements, separated by commas
+            "description": string in English that contains comma-separated words and short phrases describing the scene
         ]
     }}
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": prefix},
                 {"role": "user", "content": prompt}
@@ -72,22 +74,42 @@ def design_shots(script, characters, client):
     except Exception as e:
         raise Exception(f"Error creating shot designs: {e}, got response: {response}")
 
-def generate_diffuse_shot(shot_description, character_feature, index):
-    gender = character_feature["gender"]
-    character_description = character_feature["description"]
-    # Force single character
-    if "M" in gender:
-        prompt = "(1boy), "
-    elif "F" in gender:
-        prompt = "(1girl), "
+def generate_speech(text, index, gender, language="zh-CN"):
+    """Generate speech from text with retry on failure."""
+    if gender == "F":
+        if language == "zh-CN":
+            voice = "zh-CN-XiaoxiaoNeural"
+        elif language == "es-US":
+            voice = "es-US-PalomaNeural"
+    elif gender == "M":
+        if language == "zh-CN":
+            voice = "zh-CN-YunxiNeural"
+        elif language == "es-US":
+            voice = "es-US-AlonsoNeural"
     else:
-        raise ValueError(f"Invalid gender: {gender}, expected 'M' or 'F'")
-    prompt += f"(masterpiece), {character_description}, {shot_description}"
-    image = simple_diffuse(prompt)
-    # Create output directory if it doesn't exist
-    os.makedirs("images", exist_ok=True)
+        raise ValueError(f"Invalid gender {gender}, expected 'M' or 'F'")
 
-    # Save image
-    filename = f"images/scene_{index:04d}.png"
-    image.save(filename)
-    return filename
+    max_retries = 3
+    retry_delay = 1
+    attempt = 0
+
+    dir_path = f'./audios/{language}'
+    file_name = f'{index}.mp3'
+    file_path = os.path.join(dir_path, file_name)
+
+    while attempt < max_retries:
+        try:
+            # Create directories if they don't exist
+            os.makedirs(dir_path, exist_ok=True)
+            
+            communicate = edge_tts.Communicate(text, voice, rate='+50%')
+            communicate.save_sync(file_path)
+            break
+        except Exception as e:
+            attempt += 1
+            print(f"Attempt {attempt} failed with error: {e}")
+            if attempt < max_retries:
+                print(f"Retrying in {retry_delay} seconds...")
+            else:
+                print(f"Failed to save speech after {max_retries} attempts.")
+    return file_path
