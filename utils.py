@@ -50,9 +50,12 @@ def validate_shot_designs(shots, total_lines, characters):
     Checks that the shot json looks like:
     {
         "shots": [
-            "character_name": string, one of: {characters}
-            "coverage": [index_1, index_2, ...] # A list of int indices of the lines covered by this shot, at most length 2
-            "description": string in English that includes the required elements, separated by commas
+            {
+                "character_name": string, one of: {characters}
+                "coverage": [index_1, index_2, ...] # A list of int indices of the lines covered by this shot, at most length 2
+                "description": string in English that includes the required elements, separated by commas
+            }
+            ...
         ]
     }
     '''

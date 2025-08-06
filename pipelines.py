@@ -1,5 +1,6 @@
 import json, os
 import edge_tts
+import time
 
 def create_voiceover_script(full_text, client):
     prompt = f"""
@@ -10,8 +11,11 @@ def create_voiceover_script(full_text, client):
     {{
         "characters": ["narrator", "character_1", ...],
         "script": [
-            "voice_name": string in English,
-            "content": string in Chinese
+            {{
+                "voice_name": string in English (e.g., \"narrator\", \"character_1\", ...),
+                "content": string in Chinese
+            }},
+            ...
         ]
     }}
     """
@@ -31,12 +35,12 @@ def design_shots(script, characters, client):
     """Create a list of detailed shot descriptions from voiceover script"""
 
     prefix = f"""
-    Your task is to design shots and describe them for an anime visual novel.
-    Think of yourself as a playwright or director.
+    Your task is to design visual shots and describe them for an anime visual novel.
     You should be concise but detailed. You should include only elements that are relevant to the viewer's perception.
+    Each scene you design should be visually centered on a single character.
     
     Each description should consider the following elements:
-    - character_name: the name of the main character in the scene (only one character per scene)
+    - character_name: the name of the main character that visually appears in the scene (only one character per scene)
     - view: front, side, back, close-up, etc.
     - clothing: simple white dress, school uniform shirt, black gloves, etc.
     - expression: happy, sad, angry, surprised, etc.
@@ -51,14 +55,17 @@ def design_shots(script, characters, client):
     Full script: {script}
     
     The shots you design should cover the entire script.
-    Usually, one shot corresponds to one line, but you can design a shot that covers at most 2 lines if they are related and short.
+    Usually, one shot corresponds to one line, but you can design a shot that covers at most 2 lines if they are related and short. NEVER skip a line.
 
     Output a json that follows:
     {{
         "shots": [
-            "character_name": string, one of: {characters}
-            "coverage": [index_1, index_2, ...] # A list of int indices of the lines covered by this shot, at most length 2
-            "description": string in English that contains comma-separated words and short phrases describing the scene
+            {{
+                "voice_name": string, on of: {characters}
+                "character_name": string, who is the main character in the center of the scene? Must be centered on a single character
+                "coverage": [index_1, index_2, ...] # A list of int indices of the lines covered by this shot, at most length 2
+                "description": string in English that contains comma-separated descriptive words and short phrases describing the scene and the character in it
+            }}
         ]
     }}
     """
@@ -89,8 +96,8 @@ def generate_speech(text, index, gender, language="zh-CN"):
     else:
         raise ValueError(f"Invalid gender {gender}, expected 'M' or 'F'")
 
-    max_retries = 3
-    retry_delay = 1
+    max_retries = 10
+    retry_delay = 2
     attempt = 0
 
     dir_path = f'./audios/{language}'
@@ -108,8 +115,9 @@ def generate_speech(text, index, gender, language="zh-CN"):
         except Exception as e:
             attempt += 1
             print(f"Attempt {attempt} failed with error: {e}")
+            time.sleep(retry_delay)
             if attempt < max_retries:
                 print(f"Retrying in {retry_delay} seconds...")
             else:
-                print(f"Failed to save speech after {max_retries} attempts.")
+                raise Exception(f"Failed to save speech after {max_retries} attempts.")
     return file_path

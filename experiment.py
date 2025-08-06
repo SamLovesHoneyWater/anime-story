@@ -40,7 +40,7 @@ else:
     save_json_to_file(voiceover_script, VOICEOVER_SCRIPT_FILENAME)
 print(f"[INFO] Voiceover script characters: {voiceover_script['characters']}, length: {len(voiceover_script['script'])}")
 script = voiceover_script['script']
-characters = voiceover_script['characters'][1:]
+characters = voiceover_script['characters']
 
 
 # Check if shots design already exists
